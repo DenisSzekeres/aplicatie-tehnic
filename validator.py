@@ -1,0 +1,1 @@
+#Validarea valorilor din analize si limitele superioare
