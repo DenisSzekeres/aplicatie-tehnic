@@ -10,7 +10,8 @@ ECHIPAMENTE_SEDIMENTE = {
     "cintropur_manual" : {
         "nume" : "Cintropur - purjare mauala",
         "categorie" : "sedimente",
-        "tip_purjare" : "manuala",
+        "tip_intretinere" : "manuala",
+        "tip_filtrare" : "mecanic",
         "mediu" : "camasa filtranta",
         "modele" : {
             "NW25" : {
@@ -56,7 +57,8 @@ ECHIPAMENTE_SEDIMENTE = {
 
         "nume": "Filtru automat cu zeolita",
         "categorie": "sedimente",
-        "tip_purjare": "automata",
+        "tip_intretinere" : "automata",
+        "tehnologie" : "mediu",
         "mediu": "zeolit",
 
         "modele": {

@@ -53,10 +53,10 @@ def calculeaza_debit_proiect_cu_rezervor(
 def calculeaza_filtrare(debit_proiect, tip_filtrare, ntu):
 
     if tip_filtrare == "mecanic":
-        return cauta_filtru_mecanic(debit_proiect)
+        rezultat = cauta_filtru_mecanic(debit_proiect)
 
     elif tip_filtrare == "zeolita":
-        return cauta_filtru_zeolita(debit_proiect, ntu)
+        rezultat = cauta_filtru_zeolita(debit_proiect, ntu)
 
     else:
         return {
@@ -64,44 +64,72 @@ def calculeaza_filtrare(debit_proiect, tip_filtrare, ntu):
             "mesaj": "Tip de filtrare necunoscut."
         }
 
+    # NTU este o informatie generala despre apa,
+    # nu doar despre filtrarea cu zeolita.
+    rezultat["ntu"] = ntu
+
+    return rezultat
+
 
 def cauta_filtru_mecanic(debit_proiect):
-    """
-    Cauta filtrele mecanice care pot asigura debitul proiect.
-    """
+
     rezultate = []
 
     echipamente = database.ECHIPAMENTE_SEDIMENTE
 
     for nume_echipament, date_echipament in echipamente.items():
 
-        if date_echipament["tip_filtrare"] != "mecanic":
+        if date_echipament.get("tip_filtrare") != "mecanic":
+            continue
+
+        if "modele" not in date_echipament:
             continue
 
         for model, date_model in date_echipament["modele"].items():
 
-            if date_model["debit_maxim"] >= debit_proiect:
+            debit_filtru = date_model.get("debit_serviciu")
 
-                rezultate.append({
-                    "echipament": date_echipament["nume"],
-                    "model": model,
-                    "debit_proiect": debit_proiect,
-                    "debit_maxim": date_model["debit_maxim"],
-                    "racord": date_model.get("racord")
-                })
+            if debit_filtru is None:
+                continue
+
+            if debit_filtru < debit_proiect:
+                continue
+
+            rezerva = (
+                (debit_filtru - debit_proiect)
+                / debit_proiect
+            ) * 100
+
+            rezultate.append({
+                "echipament": date_echipament["nume"],
+                "model": model,
+                "debit_proiect": debit_proiect,
+                "debit_filtru": debit_filtru,
+                "rezerva_procent": round(rezerva, 1),
+                "racord": date_model.get("racord"),
+                "suprafata_filtrare": date_model.get(
+                    "suprafata_filtrare"
+                )
+            })
 
     if not rezultate:
 
         return {
             "status": "negasit",
-            "mesaj": "Nu exista un filtru mecanic pentru debitul proiect."
+            "mesaj": (
+                "Nu exista un filtru mecanic "
+                "pentru debitul proiect."
+            )
         }
 
-    rezultate.sort(key=lambda x: x["debit_maxim"])
+    # Cel mai mic debit de serviciu care acopera debitul proiect
+    rezultate.sort(
+        key=lambda x: x["debit_filtru"]
+    )
 
     return {
         "status": "ok",
-        "rezultate": rezultate
+        "rezultat": rezultate[0]
     }
 
 def cauta_filtru_zeolita(debit_proiect, ntu):
@@ -146,14 +174,13 @@ def cauta_filtru_zeolita(debit_proiect, ntu):
                 "echipament": zeolita["nume"],
                 "model": model,
                 "debit_proiect": debit_proiect,
-                "ntu": ntu,
                 "viteza_filtrare": viteza,
                 "debit_filtrare": debit_filtrare,
                 "rezerva_procent": round(rezerva, 1),
                 "debit_spalare": date_model["debit_spalare_m3_h"],
                 "suprafata_filtranta_m2": date_model["suprafata_filtranta_m2"],
                 "racord": date_model["racord"],
-                "bautela": date_model["butelie"],
+                "butelie": date_model["butelie"],
                 "zeolit_l": date_model["zeolit_l"],
                 "zeolit_kg": date_model["zeolit_kg"]
             }

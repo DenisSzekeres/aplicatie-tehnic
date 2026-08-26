@@ -48,26 +48,57 @@ def afiseaza_rezultat_filtrare(rezultat):
     print("\n========== REZULTAT FILTRARE ==========")
 
     if rezultat["status"] != "ok":
+
         print(rezultat["mesaj"])
         print("========================================")
         return
 
     filtru = rezultat["rezultat"]
 
+    print(f"\nTurbiditate:         {rezultat['ntu']} NTU")
+    print(f"Debit proiect:       {filtru['debit_proiect']} m3/h")
+
     print("\n---------- FILTRU RECOMANDAT ----------")
 
-    print(f"Echipament:            {filtru['echipament']}")
-    print(f"Model:                 {filtru['model']}")
-    print(f"Debit proiect:         {filtru['debit_proiect']} m3/h")
-    print(f"Turbiditate:           {filtru['ntu']} NTU")
-    print(f"Viteza filtrare:       {filtru['viteza_filtrare']} m/h")
-    print(f"Debit filtrare:        {filtru['debit_filtrare']} m3/h")
-    print(f"Rezerva:               {filtru['rezerva_procent']} %")
-    print(f"Debit spalare:         {filtru['debit_spalare']} m3/h")
-    print(f"Suprafata filtranta:   {filtru['suprafata_filtranta_m2']} m2")
-    print(f"Dimensiune:            {filtru['bautela']}")
-    print(f"Racord:                {filtru['racord']}")
-    print(f"Zeolit:                {filtru['zeolit_l']} L")
-    print(f"Zeolit:                {filtru['zeolit_kg']} kg")
+    print(f"Echipament:          {filtru['echipament']}")
+    print(f"Model:               {filtru['model']}")
+
+    # ---------------------------------
+    # CINTROPUR
+    # ---------------------------------
+
+    if "debit_filtru" in filtru:
+
+        print(f"Debit filtru:        {filtru['debit_filtru']} m3/h")
+        print(f"Rezerva:             {filtru['rezerva_procent']} %")
+        print(f"Racord:              {filtru['racord']}")
+        
+    # ---------------------------------
+    # ZEOLITA
+    # ---------------------------------
+
+    elif "viteza_filtrare" in filtru:
+
+        print(f"Viteza filtrare:     {filtru['viteza_filtrare']} m/h")
+        print(f"Debit filtrare:      {filtru['debit_filtrare']} m3/h")
+        print(f"Rezerva:             {filtru['rezerva_procent']} %")
+        print(f"Dimensiune:          {filtru['butelie']}")
+        print(f"Racord:              {filtru['racord']}")
+        print(f"Zeolit:              {filtru['zeolit_l']} L")
+        print(f"Zeolit:              {filtru['zeolit_kg']} kg")
+
+        print(
+            f"Debit spalare:       "
+            f"{filtru['debit_spalare']} m3/h"
+        )
+
+    # ---------------------------------
+    # OBSERVATIE
+    # ---------------------------------
+
+    if "observatie" in filtru:
+
+        print("\nObservatie:")
+        print(filtru["observatie"])
 
     print("========================================")
