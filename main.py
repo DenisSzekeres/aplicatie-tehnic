@@ -1,75 +1,123 @@
 import user_input
 import calculator
-import afisare
-#citim datele
+
+
+# ============================================================
+# 1. CITIRE DATE
+# ============================================================
+
 date = user_input.citeste_consum()
 
-#Verificam daca debitul este cunoscut
-if date["debit_necesar"] == 0:
-    nr_consumatori = calculator.calculeaza_numar_consumatori(date)
 
-    debit_instalat = calculator.calculeaza_debit_instalat(date)
+# ============================================================
+# 2. CALCUL DEBIT
+# ============================================================
 
-    coeficient = calculator.calculeaza_coeficient(date)
+if date["debit_necesar"] > 0:
 
-    debit_simultan = calculator.calculeaza_debit_simultan(date)
-
-    debit_necesar = debit_simultan
+    debit_calculat = date["debit_necesar"]
 
 else:
 
-    debit_necesar = date["debit_necesar"]
+    debit_calculat = calculator.calculeaza_debit_simultan(date)
 
-    nr_consumatori = None
-    debit_instalat = None
-    coeficient = None
-    debit_simultan = None
 
-debit_proiect = calculator.calculeaza_debit_proiect_cu_rezervor(
-    debit_necesar,
-    date["volum_rezervor"],
-    date["durata_varf"]
+# ============================================================
+# 3. DEBITE DE PROIECT
+# ============================================================
+
+# Dedurizatorul este dupa rezervor.
+# El trebuie sa poata asigura debitul total calculat.
+
+debit_proiect_dedurizator = debit_calculat
+
+
+# Filtrul este inaintea rezervorului.
+# Daca exista rezervor, acesta poate reduce debitul
+# necesar filtrului in timpul varfului.
+
+if date["volum_rezervor"] > 0:
+
+    debit_proiect_filtru = (
+    calculator.calculeaza_debit_proiect_cu_rezervor(
+        debit_calculat,
+        date["volum_rezervor"],
+        date["durata_varf"]
+    )
 )
 
-rezultat = {
-    "n": nr_consumatori,
-    "debit_instalat": debit_instalat,
-    "coeficient": coeficient,
-    "debit_simultan": debit_simultan,
-    "debit_necesar": debit_necesar,
-    "debit_proiect": debit_proiect,
-    "volum_rezervor": date["volum_rezervor"],
-    "durata_varf": date["durata_varf"]
-}
-
-afisare.afisare_date_debite(rezultat)
-
-print("\n========== FILTRARE ==========")
-print("1. Filtrare mecanica")
-print("2. Filtrare automata cu zeolita")
-
-alegere = input("Alege tipul de filtrare: ")
-
-
-if alegere == "1":
-
-    tip_filtrare = "mecanic"
-
-elif alegere == "2":
-
-    tip_filtrare = "zeolita"
-
 else:
 
-    print("Alegere invalida.")
-    exit()
+    debit_proiect_filtru = debit_calculat
+
+
+# ============================================================
+# 4. AFISARE DEBITE
+# ============================================================
+
+print("\n==============================")
+print("CALCUL DEBITE")
+print("==============================")
+
+print(
+    f"Debit calculat: "
+    f"{debit_calculat} m3/h"
+)
+
+print(
+    f"Debit proiect filtru: "
+    f"{debit_proiect_filtru} m3/h"
+)
+
+print(
+    f"Debit proiect dedurizator: "
+    f"{debit_proiect_dedurizator} m3/h"
+)
+
+
+# ============================================================
+# 5. ALEGERE FILTRARE
+# ============================================================
+
+tip_filtrare = user_input.citeste_tip_filtrare()
+
 
 rezultat_filtrare = calculator.calculeaza_filtrare(
-    debit_proiect,
+    debit_proiect_filtru,
     tip_filtrare,
     date["ntu"]
 )
 
-afisare.afiseaza_rezultat_filtrare(
-    rezultat_filtrare
+
+print("\n==============================")
+print("REZULTAT FILTRARE")
+print("==============================")
+
+
+print(rezultat_filtrare)
+
+
+# ============================================================
+# 6. ALEGERE DEDURIZATOR
+# ============================================================
+
+date_dedurizare = {
+    "persoane": date["persoane"],
+    "duritate": date["duritate"],
+    "debit_proiect": debit_proiect_dedurizator
+}
+
+
+rezultat_dedurizare = (
+    calculator.calculeaza_dedurizator(
+        date_dedurizare
+    )
 )
+
+
+print("\n==============================")
+print("REZULTAT DEDURIZARE")
+print("==============================")
+
+
+print(rezultat_dedurizare)
