@@ -23,6 +23,11 @@ K_MINIM = 0.20
 
 ZILE_MINIME_WATERMARK = 2
 
+# Regula interna de dimensionare a aplicatiei pentru Kinetico MACH 2030.
+# Nu este o valoare declarata de producator; este un prag de proiectare
+# pentru a evita alegerea unui echipament cu regenerari excesiv de dese.
+ZILE_MINIME_INTRE_REGENERARI_KINETICO = 1
+
 # Modul de functionare WaterMark:
 # "alternativ" = o coloana lucreaza, celelalte sunt in asteptare
 # "paralel"    = coloanele lucreaza impreuna
@@ -804,6 +809,7 @@ DEDURIZATOARE["watermark_mts_655_duplex"] = {
     "categorie": "dedurizator",
     "configuratie_sistem": "duplex",
     "mod_dimensionare_debit": "alternativ",
+    "factor_sistem_alternativ": 0.5,
     "tip": "multitanc - duplex",
     "serie": "MTS-655",
     "racord": '1 1/2"',

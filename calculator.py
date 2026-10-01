@@ -38,17 +38,80 @@ def calculeaza_debit_simultan(date):
     return debit_simultan
 
 def calculeaza_debit_proiect_cu_rezervor(
-        debit_necesar, 
-        volum_rezervor, 
-        durata_varf
+        debit_necesar,
+        volum_rezervor,
+        durata_varf,
+        ore_reumplere=24
     ):
+    """
+    Dimensioneaza debitul filtrului aflat inaintea rezervorului.
+
+    Rezervorul este tratat ca tampon: el acopera varfurile si poate
+    alimenta instalatia in timpul unei intreruperi temporare a sursei.
+    Debitul filtrului nu se calculeaza scazand artificial volumul
+    rezervorului din debitul instantaneu. Se dimensioneaza dupa timpul
+    in care rezervorul trebuie sa se poata reumple.
+
+    Daca nu exista rezervor, se pastreaza debitul proiect initial.
+    """
+
     if volum_rezervor <= 0:
-        return debit_necesar
-    durata_ore = durata_varf/60
-    debit_rezervor = volum_rezervor/durata_ore
-    debit_proiect = debit_necesar - debit_rezervor
-    debit_proiect = max(database.K_MINIM, debit_proiect)
-    return round(debit_proiect,2)
+        return round(debit_necesar, 2)
+
+    if ore_reumplere <= 0:
+        raise ValueError(
+            "Timpul de reumplere a rezervorului trebuie sa fie mai mare decat 0."
+        )
+
+    debit_reumplere = volum_rezervor / ore_reumplere
+
+    # Filtrul trebuie sa poata reface volumul rezervorului in timpul stabilit.
+    # Nu fortam un debit egal cu debitul instantaneu al instalatiei.
+    debit_proiect = min(debit_necesar, debit_reumplere)
+
+    return round(debit_proiect, 2)
+
+
+def calculeaza_date_rezervor(
+        debit_necesar,
+        volum_rezervor,
+        durata_varf,
+        ore_reumplere=24
+    ):
+    """Returneaza datele tehnice utile pentru afisarea rezervorului."""
+
+    if volum_rezervor <= 0:
+        return {
+            "debit_proiect_filtru": round(debit_necesar, 2),
+            "volum_consum_varf": 0,
+            "rezerva_volum": 0,
+            "autonomie_varf": 0,
+            "debit_reumplere": round(debit_necesar, 2)
+        }
+
+    if durata_varf <= 0:
+        raise ValueError(
+            "Durata varfului trebuie sa fie mai mare decat 0."
+        )
+
+    if ore_reumplere <= 0:
+        raise ValueError(
+            "Timpul de reumplere a rezervorului trebuie sa fie mai mare decat 0."
+        )
+
+    volum_consum_varf = debit_necesar * (durata_varf / 60)
+    rezerva_volum = max(0, volum_rezervor - volum_consum_varf)
+    debit_reumplere = volum_rezervor / ore_reumplere
+    debit_proiect_filtru = max(database.K_MINIM, debit_reumplere)
+    autonomie_varf = volum_rezervor / debit_necesar if debit_necesar > 0 else 0
+
+    return {
+        "debit_proiect_filtru": round(debit_proiect_filtru, 2),
+        "volum_consum_varf": round(volum_consum_varf, 2),
+        "rezerva_volum": round(rezerva_volum, 2),
+        "autonomie_varf": round(autonomie_varf, 2),
+        "debit_reumplere": round(debit_reumplere, 2)
+    }
 
 def calculeaza_filtrare(debit_proiect, tip_filtrare, ntu):
 
@@ -253,22 +316,57 @@ def calculeaza_consum_zilnic(date):
     """
     Stabileste consumul zilnic in m3/zi.
 
-    Daca este introdus consumul real, acesta are prioritate.
-    Daca nu exista, folosim numarul de persoane.
+    Reguli:
+    - consum_cunoscut -> folosim consumul introdus
+    - estimare_persoane -> calculam din numarul de persoane
+    - necunoscut -> nu estimam nimic
     """
 
-    if date.get("consum_zilnic") is not None:
-        return date["consum_zilnic"]
+    mod_consum = date.get("mod_consum")
 
-    if date.get("persoane") is not None:
+    # ========================================================
+    # 1. CONSUM CUNOSCUT
+    # ========================================================
+
+    if mod_consum == "consum_cunoscut":
+
+        consum_zilnic = date.get("consum_zilnic")
+
+        if consum_zilnic is not None:
+            return consum_zilnic
+
+        return None
+
+    # ========================================================
+    # 2. ESTIMARE DIN NUMARUL DE PERSOANE
+    # ========================================================
+
+    if mod_consum == "estimare_persoane":
+
+        persoane = date.get("persoane")
+
+        if persoane is None:
+            return None
+
         # Valoare provizorie.
         # O vom muta ulterior in database.py.
         consum_persoana = 0.15
 
         return round(
-            date["persoane"] * consum_persoana,
+            persoane * consum_persoana,
             2
         )
+
+    # ========================================================
+    # 3. CONSUM NECUNOSCUT
+    # ========================================================
+
+    if mod_consum == "necunoscut":
+        return None
+
+    # ========================================================
+    # 4. CAZ NECUNOSCUT
+    # ========================================================
 
     return None
 
@@ -310,9 +408,11 @@ def calculeaza_necesar_dedurizare(
 
 
 def verifica_debit_dedurizator(echipament, debit_proiect):
-    """
-    Verifica debitul necesar fata de debitul de lucru
-    si debitul de varf al echipamentului.
+    """Verifica debitul normal al echipamentului.
+
+    Debit de varf este doar informatie pentru o situatie exceptionala;
+    nu este folosit pentru a declara echipamentul potrivit debitului
+    normal de proiect.
     """
 
     debit_lucru = echipament.get("debit_lucru_m3_h")
@@ -324,24 +424,17 @@ def verifica_debit_dedurizator(echipament, debit_proiect):
             "tip": "necunoscut"
         }
 
-    # Functionare normala
     if debit_proiect <= debit_lucru:
         return {
             "ok": True,
             "tip": "debit_lucru"
         }
 
-    # Debit proiect peste debitul de lucru,
-    # dar in limita debitului de varf
-    if debit_varf is not None and debit_proiect <= debit_varf:
-        return {
-            "ok": True,
-            "tip": "debit_varf"
-        }
-
     return {
         "ok": False,
-        "tip": "depasit"
+        "tip": "depasit_debit_lucru",
+        "debit_lucru": debit_lucru,
+        "debit_varf": debit_varf
     }
 
 
@@ -378,19 +471,16 @@ def cauta_ergo_11(
     ]
 
     # Verificare debit
-    if not verifica_debit_dedurizator(
+    verificare_debit = verifica_debit_dedurizator(
         ergo,
         debit_proiect
-    ):
+    )
+
+    if not verificare_debit["ok"]:
         return None
 
     # Verificare duritate
-    verificare_debit = verifica_debit_dedurizator(
-    ergo,
-    debit_proiect
-)
-
-    if not verificare_debit["ok"]:
+    if not verifica_duritate_dedurizator(ergo, duritate):
         return None
 
     # Tabelul producatorului
@@ -472,20 +562,17 @@ def cauta_2030(
         "kinetico_2030"
     ]
 
-    # Verificare debit
-    if not verifica_debit_dedurizator(
+    # Verificare debit normal
+    verificare_debit = verifica_debit_dedurizator(
         model,
         debit_proiect
-    ):
+    )
+
+    if not verificare_debit["ok"]:
         return None
 
     # Verificare duritate
-    verificare_debit = verifica_debit_dedurizator(
-    model,
-    debit_proiect
-)
-
-    if not verificare_debit["ok"]:
+    if not verifica_duritate_dedurizator(model, duritate):
         return None
 
     discuri = model[
@@ -539,6 +626,14 @@ def cauta_2030(
         capacitate_m3 / consum_zilnic
     )
 
+    zile_minime = getattr(
+        database,
+        "ZILE_MINIME_INTRE_REGENERARI_KINETICO",
+        1
+    )
+
+    if zile_intre_regenerari < zile_minime:
+        return None
 
     return {
         "model": model["nume"],
@@ -1028,10 +1123,21 @@ def cauta_watermark(
 
             rezultat_configuratie = rezultate_configuratie[0]
 
+            mod_dimensionare = rezultat_configuratie.get(
+                "mod_dimensionare_debit",
+                "normal"
+            )
+
+            if mod_dimensionare == "paralel":
+                descriere_mod = "dimensionare in paralel"
+            elif mod_dimensionare == "alternativ":
+                descriere_mod = "dimensionare in alternativ"
+            else:
+                descriere_mod = "dimensionare normala"
+
             rezultat_configuratie["observatie"] = (
                 "WaterMark disponibil pentru "
-                "functionare alternativa, "
-                "in functie de debit si capacitatea "
+                f"{descriere_mod}, in functie de debit si capacitatea "
                 "necesara pentru minimum "
                 f"{database.ZILE_MINIME_WATERMARK} zile."
             )
@@ -1098,12 +1204,12 @@ def calculeaza_debit_watermark(
 
     # DUPLEX si CUADRUPLEX / sistem alternativ
     if mod_dimensionare == "alternativ":
-        factor = model.get(
+        factor = familie.get(
             "factor_sistem_alternativ"
         )
 
         if factor is None:
-            factor = familie.get(
+            factor = model.get(
                 "factor_sistem_alternativ",
                 1.0
             )
