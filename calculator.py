@@ -1230,15 +1230,15 @@ def calculeaza_dedurizator(date):
     """
     Alege dedurizatorul potrivit.
 
-    Ordinea de alegere:
+    Daca exista consum zilnic:
+        face dimensionarea completa.
 
-    1. ERGO 11
-    2. Kinetico MACH 2030
-    3. WaterMark
+    Daca NU exista consum zilnic:
+        face o dimensionare hidraulica partiala, bazata pe:
+        - debitul proiectului
+        - duritatea apei
 
-    Debit_proiect este obligatoriu.
-    Duritatea este obligatorie.
-    Consumul zilnic este calculat din datele introduse.
+        Nu inventeaza capacitatea sau intervalul dintre regenerari.
     """
 
     if date.get("debit_proiect") is None:
@@ -1255,78 +1255,174 @@ def calculeaza_dedurizator(date):
 
     consum_zilnic = calculeaza_consum_zilnic(date)
 
-    if consum_zilnic is None:
-        raise ValueError(
-            "Introdu consumul zilnic sau numarul "
-            "de persoane."
-        )
-
     debit_proiect = date["debit_proiect"]
     duritate = date["duritate"]
 
+    # FARA CONSUM ZILNIC
+    if consum_zilnic is None:
 
-    # ========================================================
-    # 1. ERGO 11
-    # ========================================================
+        # 1. ERGO 11
+        ergo = database.DEDURIZATOARE.get("kinetico_ergo_11")
+
+        if ergo is not None:
+            verificare_debit = verifica_debit_dedurizator(
+                ergo, debit_proiect
+            )
+            verificare_duritate = verifica_duritate_dedurizator(
+                ergo, duritate
+            )
+
+            if verificare_debit["ok"] and verificare_duritate:
+                return {
+                    "status": "partial",
+                    "rezultat": {
+                        "model": ergo["nume"],
+                        "cod": "kinetico_ergo_11",
+                        "debit_proiect": debit_proiect,
+                        "debit_echipament": ergo["debit_lucru_m3_h"],
+                        "duritate": duritate,
+                        "dimensionare": "hidraulica",
+                        "capacitate_intre_regenerari_l": None,
+                        "capacitate_intre_regenerari_m3": None,
+                        "regenerari_zi": None,
+                        "sare_regenerare_kg": None,
+                        "apa_regenerare_l": None,
+                        "observatie": (
+                            "Echipamentul este compatibil cu debitul "
+                            "proiect si duritatea introduse. Pentru "
+                            "dimensionarea capacitatii si a regenerarii "
+                            "este necesar consumul zilnic."
+                        ),
+                    },
+                }
+
+        # 2. KINETICO MACH 2030
+        model_2030 = database.DEDURIZATOARE.get("kinetico_2030")
+
+        if model_2030 is not None:
+            verificare_debit = verifica_debit_dedurizator(
+                model_2030, debit_proiect
+            )
+            verificare_duritate = verifica_duritate_dedurizator(
+                model_2030, duritate
+            )
+
+            if verificare_debit["ok"] and verificare_duritate:
+                return {
+                    "status": "partial",
+                    "rezultat": {
+                        "model": model_2030["nume"],
+                        "cod": "kinetico_2030",
+                        "debit_proiect": debit_proiect,
+                        "debit_echipament": model_2030["debit_lucru_m3_h"],
+                        "duritate": duritate,
+                        "dimensionare": "hidraulica",
+                        "capacitate_intre_regenerari_l": None,
+                        "capacitate_intre_regenerari_m3": None,
+                        "regenerari_zi": None,
+                        "sare_regenerare_kg": None,
+                        "apa_regenerare_l": None,
+                        "observatie": (
+                            "Echipamentul este compatibil cu debitul "
+                            "proiect si duritatea introduse. Pentru "
+                            "dimensionarea capacitatii si a regenerarii "
+                            "este necesar consumul zilnic."
+                        ),
+                    },
+                }
+
+        # 3. WATERMARK - pentru moment verificam compatibilitatea hidraulica
+        watermark = database.DEDURIZATOARE
+
+        for cod_familie, familie in watermark.items():
+            if familie.get("producator") != "WaterMark":
+                continue
+
+            modele = familie.get("modele", {})
+
+            for cod_model, model in modele.items():
+                debit = model.get("debit_lucru_m3_h")
+
+                if debit is None:
+                    debit = familie.get("debit_nominal_m3_h")
+
+                if debit is None:
+                    continue
+
+                if isinstance(debit, tuple):
+                    debit_maxim = debit[1]
+                else:
+                    debit_maxim = debit
+
+                if debit_maxim is None or debit_proiect > debit_maxim:
+                    continue
+
+                return {
+                    "status": "partial",
+                    "rezultat": {
+                        "model": model.get("nume", cod_model),
+                        "cod": cod_model,
+                        "debit_proiect": debit_proiect,
+                        "debit_echipament": debit_maxim,
+                        "duritate": duritate,
+                        "dimensionare": "hidraulica",
+                        "capacitate_intre_regenerari_l": None,
+                        "capacitate_intre_regenerari_m3": None,
+                        "regenerari_zi": None,
+                        "sare_regenerare_kg": None,
+                        "apa_regenerare_l": None,
+                        "observatie": (
+                            "Echipamentul acopera debitul proiect. "
+                            "Pentru dimensionarea capacitatii si a "
+                            "intervalului dintre regenerari este necesar "
+                            "consumul zilnic."
+                        ),
+                    },
+                }
+
+        return {
+            "status": "partial_negasit",
+            "mesaj": (
+                "Nu a fost identificat un dedurizator compatibil cu "
+                "debitul si duritatea introduse. Consumul zilnic nu "
+                "este disponibil pentru dimensionarea capacitatii."
+            ),
+        }
+
+    # CU CONSUM ZILNIC - DIMENSIONARE COMPLETA
 
     rezultat_ergo = cauta_ergo_11(
-        consum_zilnic,
-        duritate,
-        debit_proiect
+        consum_zilnic, duritate, debit_proiect
     )
 
     if rezultat_ergo is not None:
-
         return {
             "status": "ok",
-            "rezultat": rezultat_ergo
+            "rezultat": rezultat_ergo,
         }
 
-
-    # ========================================================
-    # 2. KINETICO MACH 2030
-    # ========================================================
-
     rezultat_2030 = cauta_2030(
-        consum_zilnic,
-        duritate,
-        debit_proiect
+        consum_zilnic, duritate, debit_proiect
     )
 
     if rezultat_2030 is not None:
-
         return {
             "status": "ok",
-            "rezultat": rezultat_2030
+            "rezultat": rezultat_2030,
         }
 
-
-    # ========================================================
-    # 3. WATERMARK
-    # ========================================================
-
     rezultat_watermark = cauta_watermark(
-        consum_zilnic,
-        duritate,
-        debit_proiect
+        consum_zilnic, duritate, debit_proiect
     )
 
     if rezultat_watermark["status"] == "ok":
-
         return rezultat_watermark
-
-
-    # ========================================================
-    # NICIUN REZULTAT
-    # ========================================================
 
     return {
         "status": "negasit",
         "mesaj": (
-            "Niciun dedurizator disponibil nu poate "
-            "acoperi debitul si necesarul calculat."
-        )
+            "Niciun dedurizator disponibil nu poate acoperi "
+            "debitul si necesarul calculat."
+        ),
     }
-
-
 
